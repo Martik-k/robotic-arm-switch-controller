@@ -219,3 +219,10 @@ __marimo__/
 
 plan.md
 desicions.md
+
+# Training runs: models, checkpoints, vec_normalize.pkl, TensorBoard logs
+runs/
+
+# Local notes and exploration, not shared
+docs/rl-training-guidelines.md
+scripts/inspect_task.py
