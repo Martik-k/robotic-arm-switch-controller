@@ -1,8 +1,4 @@
-"""Explore Meta-World tasks: print observation layout, run random actions, save renders.
-
-Usage:
-    python scripts/explore_env.py
-"""
+"""Explore Meta-World tasks: print observations, run random actions, save renders."""
 import os
 from pathlib import Path
 
