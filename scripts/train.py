@@ -38,6 +38,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--verbose", action=argparse.BooleanOptionalAction,
                         help="print a progress table every rollout (--no-verbose to disable); "
                              "default: from config")
+    # noise on the object position in training envs (meters)
+    parser.add_argument("--noise-jitter", type=float, help="default: from config (0)")
+    parser.add_argument("--noise-bias", type=float, help="default: from config (0)")
     return parser.parse_args()
 
 
@@ -53,7 +56,7 @@ def cpu_name() -> str:
 
 
 def load_config(args: argparse.Namespace) -> dict:
-    """Load the yaml config, replace values with the ones from the command line, add run info."""
+    """Load the config, override it with command line args, add run info."""
     path = args.config or ROOT / "configs" / f"{args.algo}.yaml"
     config = yaml.safe_load(path.read_text())
 
@@ -72,9 +75,14 @@ def load_config(args: argparse.Namespace) -> dict:
         config["training"]["keep_checkpoints"] = args.keep_checkpoints
     if args.verbose is not None:
         config["training"]["verbose"] = args.verbose
+    if args.noise_jitter is not None:
+        config["env"]["noise_jitter"] = args.noise_jitter
+    if args.noise_bias is not None:
+        config["env"]["noise_bias"] = args.noise_bias
 
     config["run"] = {
         "algo": args.algo,
+        "variant": variant_name(args.algo, config["env"]),
         "seed": args.seed,
         # PPO network is small so GPU doesn't help; SAC trains every step so GPU can help
         "device": args.device or ("cpu" if args.algo == "ppo" else "auto"),
@@ -86,10 +94,19 @@ def load_config(args: argparse.Namespace) -> dict:
     return config
 
 
+def variant_name(algo: str, env_cfg: dict) -> str:
+    # e.g. 'ppo' or 'ppo-bias2cm', so different runs don't mix in plots
+    name = algo
+    for kind in ("jitter", "bias"):
+        sigma = env_cfg.get(f"noise_{kind}", 0.0)
+        if sigma:
+            name += f"-{kind}{sigma * 100:g}cm"
+    return name
+
+
 def make_run_dir(args: argparse.Namespace, config: dict) -> Path:
-    """Make a new folder for the run (never overwrite old ones) and save the config there."""
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    name = args.run_name or f"{args.algo}_{config['env']['name']}_seed{args.seed}_{timestamp}"
+    name = args.run_name or f"{config['run']['variant']}_{config['env']['name']}_seed{args.seed}_{timestamp}"
     run_dir = ROOT / "runs" / name
     suffix = 2
     while run_dir.exists():  # folder already exists -> add _2, _3, ...
@@ -101,7 +118,7 @@ def make_run_dir(args: argparse.Namespace, config: dict) -> Path:
 
 
 def build_envs(config: dict, run_dir: Path) -> tuple[VecNormalize, VecNormalize]:
-    """Make the training envs (copy i gets seed + i) and one exam env with new button positions."""
+    """Training envs (copy i gets seed + i) and one exam env with new positions."""
     env_cfg, train_cfg, run = config["env"], config["training"], config["run"]
     norm = config["normalize"]
     env_kwargs = {"reward_function_version": env_cfg["reward_function_version"]}
@@ -110,6 +127,8 @@ def build_envs(config: dict, run_dir: Path) -> tuple[VecNormalize, VecNormalize]
         env_cfg["name"], seed=run["seed"], n_envs=env_cfg["n_envs"],
         subprocess=run["algo"] == "ppo",  # SAC uses only one env
         monitor_dir=run_dir / "monitor" if train_cfg["save_monitor_csv"] else None,
+        # exams stay without noise, so learning curves are comparable
+        noise_jitter=env_cfg.get("noise_jitter", 0.0), noise_bias=env_cfg.get("noise_bias", 0.0),
         **env_kwargs,
     )
     # same gamma as the algorithm, because reward normalization uses it
@@ -118,13 +137,12 @@ def build_envs(config: dict, run_dir: Path) -> tuple[VecNormalize, VecNormalize]
 
     eval_env = make_vec_env(env_cfg["name"], seed=train_cfg["eval_seed"], n_envs=1,
                             subprocess=False, **env_kwargs)
-    # exam env doesn't update the stats (it gets them from the training env) and keeps real rewards
+    # exam env only reads the stats from the training env and keeps real rewards
     eval_env = VecNormalize(eval_env, training=False, norm_obs=norm["norm_obs"], norm_reward=False)
     return train_env, eval_env
 
 
 def build_model(config: dict, train_env: VecNormalize, run_dir: Path) -> BaseAlgorithm:
-    """Create the PPO/SAC agent with parameters from the config."""
     run = config["run"]
     return ALGOS[run["algo"]](
         "MlpPolicy", train_env,
@@ -137,7 +155,7 @@ def build_model(config: dict, train_env: VecNormalize, run_dir: Path) -> BaseAlg
 
 
 class SaveVecNormalizeCallback(BaseCallback):
-    """Save vec_normalize.pkl next to best_model.zip, the model does not work without it."""
+    """Saves vec_normalize.pkl next to best_model.zip."""
 
     def __init__(self, save_dir: Path):
         super().__init__()
@@ -149,7 +167,7 @@ class SaveVecNormalizeCallback(BaseCallback):
 
 
 class PrunedCheckpointCallback(CheckpointCallback):
-    """Same as CheckpointCallback, but can delete old checkpoints and keep only the last N."""
+    """CheckpointCallback that keeps only the last N checkpoints."""
 
     def __init__(self, keep_last: int | None, **kwargs):
         super().__init__(**kwargs)
@@ -158,7 +176,7 @@ class PrunedCheckpointCallback(CheckpointCallback):
     def _on_step(self) -> bool:
         result = super()._on_step()
         if self.keep_last and self.n_calls % self.save_freq == 0:
-            # names look like model_vecnormalize_100000_steps.pkl, the number is the step
+            # e.g. model_vecnormalize_100000_steps.pkl
             for pattern in ("model_*_steps.zip", "model_vecnormalize_*_steps.pkl"):
                 files = sorted(Path(self.save_path).glob(pattern),
                                key=lambda p: int(p.stem.split("_")[-2]))
@@ -168,7 +186,6 @@ class PrunedCheckpointCallback(CheckpointCallback):
 
 
 def build_callbacks(config: dict, eval_env: VecNormalize, run_dir: Path) -> list[BaseCallback]:
-    """Exam every eval_freq steps and save a checkpoint every checkpoint_freq steps."""
     train_cfg, n_envs = config["training"], config["env"]["n_envs"]
     verbose = int(train_cfg["verbose"])
     # callbacks count env.step() calls, one call = n_envs steps, so we divide
@@ -182,7 +199,7 @@ def build_callbacks(config: dict, eval_env: VecNormalize, run_dir: Path) -> list
         n_eval_episodes=train_cfg["n_eval_episodes"],
         eval_freq=eval_calls,
         deterministic=True,  # no random noise during the exam
-        log_path=str(run_dir / "eval"),  # rewards and successes of all exams go to evaluations.npz
+        log_path=str(run_dir / "eval"),
         best_model_save_path=str(best_dir),
         callback_on_new_best=SaveVecNormalizeCallback(best_dir),
         verbose=verbose,
@@ -199,7 +216,7 @@ def build_callbacks(config: dict, eval_env: VecNormalize, run_dir: Path) -> list
 
 
 def write_summary(run_dir: Path, model: BaseAlgorithm, status: str, start_time: float) -> dict:
-    """Write how the run went (status, time, last exam result) to summary.yaml."""
+    """status, time and last exam -> summary.yaml"""
     duration = time.time() - start_time
     summary = {
         "status": status,

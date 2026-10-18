@@ -4,6 +4,8 @@ env:
   name: button-press-v3
   reward_function_version: v2   # reward formula; v2 works better than v1 (McLean et al. 2025)
   n_envs: 8                     # simulator copies running in parallel, <= CPU cores
+  noise_jitter: 0.0             # training only: new error on the object position every step (m)
+  noise_bias: 0.0               # training only: one error on the object position per episode (m)
 
 normalize:
   norm_obs: true                # rescale each obs number to mean ~0, std ~1 (Andrychowicz et al. 2021)
