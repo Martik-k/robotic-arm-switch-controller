@@ -27,7 +27,7 @@ ppo:
     log_std_init: -0.5          # initial action std e^-0.5 ~ 0.61 (Andrychowicz et al. 2021)
 
 training:
-  total_steps: 3_000_000        # env steps in total, ~730 rollouts
+  total_steps: 1_000_000        # env steps in total, ~245 rollouts; same budget as SAC for a fair comparison
   eval_seed: 1000               # exam positions, unseen in training and same for all runs
   eval_freq: 50_000             # env steps between exams
   n_eval_episodes: 20           # episodes per exam, deterministic actions
