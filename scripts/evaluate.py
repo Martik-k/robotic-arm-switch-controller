@@ -1,15 +1,17 @@
-"""Evaluate trained agents on unseen button positions. Run: python -m scripts.evaluate --run runs/<run>"""
+"""Evaluate agents on unseen button positions. Run: python -m scripts.evaluate --run runs/<run>"""
 import argparse
 import csv
 import datetime
 import os
+import warnings
 from pathlib import Path
 
-os.environ.setdefault("MUJOCO_GL", "egl")  # offscreen rendering for videos, must be set before mujoco loads
+os.environ.setdefault("MUJOCO_GL", "egl")  # for videos, before mujoco loads
 
 import imageio.v2 as imageio
 import numpy as np
 import yaml
+from metaworld.policies import ENV_POLICY_MAP
 from stable_baselines3 import PPO, SAC
 from stable_baselines3.common.base_class import BaseAlgorithm
 from stable_baselines3.common.vec_env import VecNormalize
@@ -25,22 +27,44 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", type=Path, nargs="+", default=[], help="one or more run folders")
     parser.add_argument("--random", action="store_true", help="also evaluate a random policy (baseline)")
+    parser.add_argument("--expert", action="store_true",
+                        help="also evaluate Meta-World's hand-written policy (baseline)")
     parser.add_argument("--checkpoint", default="final",
                         help="final, best, untrained, or a step number from checkpoints/")
-    # 5 sets of 50 positions that no training run uses (training seeds are seed + i, far below 1000)
+    # 5 sets of positions that no training run uses
     parser.add_argument("--eval-seeds", type=int, nargs="+", default=[1000, 1001, 1002, 1003, 1004])
     parser.add_argument("--episodes-per-seed", type=int, default=10)
     parser.add_argument("--video", type=int, default=0, help="number of videos to record per policy")
     parser.add_argument("--stochastic", action="store_true",
                         help="sample actions from the policy (like during training) instead of its mean")
     parser.add_argument("--config", type=Path, default=ROOT / "configs" / "ppo.yaml",
-                        help="env settings for --random")
-    parser.add_argument("--output", type=Path, default=ROOT / "results" / "metrics.csv")
+                        help="env settings for --random and --expert")
+    parser.add_argument("--env", help="task for --random and --expert; default: from --config")
+    # noise on the button position (meters)
+    parser.add_argument("--noise-jitter", type=float, help="std of a new error at every step, e.g. 0.01")
+    parser.add_argument("--noise-bias", type=float, help="std of one error per episode, e.g. 0.01")
+    parser.add_argument("--output", type=Path,
+                        help="default: results/metrics.csv, or results/robustness.csv with --noise-*")
     return parser.parse_args()
 
 
+class ExpertPolicy:
+    """Meta-World's scripted policy with the same predict() as SB3 models."""
+
+    def __init__(self, env_name: str):
+        self.policy = ENV_POLICY_MAP[env_name]()
+
+    def predict(self, obs: np.ndarray, deterministic: bool = True) -> tuple[np.ndarray, None]:
+        with warnings.catch_warnings():  # its actions go outside [-1, 1], env clips them
+            warnings.simplefilter("ignore")
+            return np.array([self.policy.get_action(o) for o in obs]), None
+
+
+def noise_kwargs(args: argparse.Namespace) -> dict:
+    return {"noise_jitter": args.noise_jitter or 0.0, "noise_bias": args.noise_bias or 0.0}
+
+
 def model_files(run_dir: Path, checkpoint: str) -> tuple[Path, Path]:
-    """Paths to the model and its vec_normalize.pkl, they always go together."""
     if checkpoint == "final":
         return run_dir / "model.zip", run_dir / "vec_normalize.pkl"
     if checkpoint == "best":
@@ -51,25 +75,24 @@ def model_files(run_dir: Path, checkpoint: str) -> tuple[Path, Path]:
 
 
 def make_eval_env(config: dict, seed: int, vecnorm_path: Path | None, **env_kwargs):
-    """One env on the positions of `seed`, with the normalization stats saved during training."""
+    """One env on the positions of `seed` with the saved normalization stats."""
     env = make_vec_env(config["env"]["name"], seed=seed, n_envs=1, subprocess=False,
                        reward_function_version=config["env"]["reward_function_version"], **env_kwargs)
-    env.seed(seed)  # same order of positions every time we evaluate
-    env.action_space.seed(seed)  # same random actions for the random policy
-    if vecnorm_path is None:  # random or untrained policy, see load_policy
+    env.seed(seed)  # same positions every time
+    env.action_space.seed(seed)
+    if vecnorm_path is None:
         return env
     env = VecNormalize.load(str(vecnorm_path), env)
-    env.training = False      # don't change the stats the model was trained with
-    env.norm_reward = False   # we want real rewards in the results
+    env.training = False      # don't change the stats
+    env.norm_reward = False   # real rewards in results
     return env
 
 
 def load_policy(run_dir: Path, checkpoint: str, config: dict) -> tuple[BaseAlgorithm, Path | None]:
-    """Load the model (or rebuild the untrained one) and the path to its normalization stats."""
     algo = ALGOS[config["run"]["algo"]]
     if checkpoint == "untrained":
-        # Same config + same seed = the exact initial weights this run started from.
-        # Fresh normalization stats are mean 0, std 1, i.e. they don't change the obs, so we skip them
+        # same config + seed = the same initial weights as in training
+        # fresh normalization (mean 0, std 1) doesn't change obs, so we skip it
         env = make_eval_env(config, seed=0, vecnorm_path=None)
         model = algo("MlpPolicy", env, seed=config["run"]["seed"], device="cpu",
                      **config[config["run"]["algo"]])
@@ -81,7 +104,7 @@ def load_policy(run_dir: Path, checkpoint: str, config: dict) -> tuple[BaseAlgor
 
 def run_episodes(env, model: BaseAlgorithm | None, n_episodes: int, frames: list | None = None,
                  stochastic: bool = False) -> list[dict]:
-    """Play n episodes; for each one remember success, first success step and total reward."""
+    """Play n episodes: success, first success step and total reward of each."""
     records = []
     obs = env.reset()
     step, total_reward, first_success = 0, 0.0, None
@@ -91,14 +114,14 @@ def run_episodes(env, model: BaseAlgorithm | None, n_episodes: int, frames: list
         if model is None:
             action = np.array([env.action_space.sample()])
         else:
-            # mean of the action distribution, or a random sample from it with --stochastic
+            # mean action, or a random sample with --stochastic
             action, _ = model.predict(obs, deterministic=not stochastic)
         obs, reward, done, infos = env.step(action)
         step += 1
         total_reward += float(reward[0])
         if first_success is None and infos[0]["success"]:
             first_success = step
-        if done[0]:  # the env resets by itself, so we just start counting a new episode
+        if done[0]:  # env resets by itself
             records.append({"success": bool(infos[0]["is_success"]),
                             "first_success_step": first_success,
                             "total_reward": total_reward})
@@ -107,7 +130,7 @@ def run_episodes(env, model: BaseAlgorithm | None, n_episodes: int, frames: list
 
 
 def summarize(records: list[dict]) -> dict:
-    """The three metrics: success rate, mean first success step (only successful), mean reward."""
+    # first success step only over successful episodes
     successes = [r["success"] for r in records]
     steps = [r["first_success_step"] for r in records if r["first_success_step"] is not None]
     rewards = [r["total_reward"] for r in records]
@@ -122,20 +145,19 @@ def summarize(records: list[dict]) -> dict:
 
 def evaluate(config: dict, model: BaseAlgorithm | None, vecnorm_path: Path | None,
              args: argparse.Namespace) -> dict:
-    """Run the policy on every eval seed and compute the metrics over all episodes."""
     records = []
     for seed in args.eval_seeds:
-        env = make_eval_env(config, seed, vecnorm_path)
+        env = make_eval_env(config, seed, vecnorm_path, **noise_kwargs(args))
         records += run_episodes(env, model, args.episodes_per_seed, stochastic=args.stochastic)
         env.close()
     return summarize(records)
 
 
 def record_videos(config: dict, model: BaseAlgorithm | None, vecnorm_path: Path | None,
-                  n_videos: int, name: str, seed: int, stochastic: bool) -> None:
-    """Save n episodes as mp4 (side camera), each one with a different button position."""
+                  n_videos: int, name: str, seed: int, stochastic: bool, noise: dict) -> None:
+    """n episodes as mp4, each with another button position."""
     VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    env = make_eval_env(config, seed, vecnorm_path, render_mode="rgb_array", camera_name="corner2")
+    env = make_eval_env(config, seed, vecnorm_path, render_mode="rgb_array", camera_name="corner2", **noise)
     for i in range(1, n_videos + 1):
         frames = []
         run_episodes(env, model, 1, frames, stochastic)
@@ -146,7 +168,6 @@ def record_videos(config: dict, model: BaseAlgorithm | None, vecnorm_path: Path 
 
 
 def save_metrics(path: Path, row: dict) -> None:
-    """Append one row to the metrics table (header is written only for a new file)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
     with path.open("a", newline="") as f:
@@ -158,35 +179,51 @@ def save_metrics(path: Path, row: dict) -> None:
 
 def main() -> None:
     args = parse_args()
-    # (name, config, model, vecnorm_path) for every policy we evaluate
+    # noise tests go to their own table
+    robustness = args.noise_jitter is not None or args.noise_bias is not None
+    output = args.output or ROOT / "results" / ("robustness.csv" if robustness else "metrics.csv")
+    noise = noise_kwargs(args)
+    # (name, config, model, vecnorm_path)
     policies = []
+    baseline_config = yaml.safe_load(args.config.read_text())
+    if args.env:
+        baseline_config["env"]["name"] = args.env
     if args.random:
-        config = yaml.safe_load(args.config.read_text())
-        config["run"] = {"algo": "random", "seed": ""}
+        config = {**baseline_config, "run": {"algo": "random", "seed": ""}}
         policies.append(("random", config, None, None))
+    if args.expert:
+        config = {**baseline_config, "run": {"algo": "expert", "seed": ""}}
+        # expert reads raw coordinates
+        policies.append(("expert", config, ExpertPolicy(config["env"]["name"]), None))
     for run_dir in args.run:
         config = yaml.safe_load((run_dir / "config.yaml").read_text())
         model, vecnorm_path = load_policy(run_dir, args.checkpoint, config)
-        name = f"{config['run']['algo']}_seed{config['run']['seed']}_{args.checkpoint}"
-        if args.stochastic:  # keep these rows and videos apart from the normal (deterministic) ones
+        # old runs have no variant
+        name = f"{config['run'].get('variant', config['run']['algo'])}_seed{config['run']['seed']}_{args.checkpoint}"
+        if args.stochastic:
             name += "_stochastic"
         policies.append((name, config, model, vecnorm_path))
 
     for name, config, model, vecnorm_path in policies:
         metrics = evaluate(config, model, vecnorm_path, args)
         print(f"{name}: {metrics}")
-        save_metrics(args.output, {
+        noise_columns = noise if robustness else {}
+        save_metrics(output, {
             "date": datetime.datetime.now().isoformat(timespec="seconds"),
+            "env": config["env"]["name"],
             "policy": name,
             "algo": config["run"]["algo"],
+            "variant": config["run"].get("variant", config["run"]["algo"]),
             "seed": config["run"]["seed"],
-            "checkpoint": "" if model is None else args.checkpoint,
+            "checkpoint": args.checkpoint if isinstance(model, BaseAlgorithm) else "",
             "eval_seeds": " ".join(map(str, args.eval_seeds)),
+            **noise_columns,
             **metrics,
         })
         if args.video:
-            record_videos(config, model, vecnorm_path, args.video, name, args.eval_seeds[0],
-                          args.stochastic)
+            video_name = f"{config['env']['name']}_{name}" + (f"_jitter{noise['noise_jitter']}_bias{noise['noise_bias']}" if robustness else "")
+            record_videos(config, model, vecnorm_path, args.video, video_name, args.eval_seeds[0],
+                          args.stochastic, noise)
 
 
 if __name__ == "__main__":
