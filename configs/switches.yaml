@@ -1,0 +1,41 @@
+# ==============================================================================
+# Ultralytics YOLO Dataset Configuration: Industrial Rotary Isolator Switches
+# European Rover Challenge (ERC) - Maintenance Task (Autonomous Robotic Arm)
+# ==============================================================================
+#
+# Path Resolution Notes:
+# - 'path' defines the root directory for all split paths below.
+# - Can be specified as:
+#     1. Relative path from project root: 'data'
+#     2. Project root itself: '.' (if images/train and images/val are at root)
+#     3. Absolute path (recommended for multi-node / remote distributed runs):
+#        Windows: 'C:/Users/Marko/personal/UCU/third_year/ai/project/robotic-arm-switch-controller/data'
+#        Linux/WSL: '/home/user/project/robotic-arm-switch-controller/data'
+#
+# Directory Structure Expected:
+#   <path>/
+#   ├── images/
+#   │   ├── train/  (e.g., v1_frame_000000.PNG, v2_frame_000000.PNG)
+#   │   └── val/    (e.g., v3_frame_000000.PNG)
+#   └── labels/
+#       ├── train/  (e.g., v1_frame_000000.txt, v2_frame_000000.txt)
+#       └── val/    (e.g., v3_frame_000000.txt)
+# ==============================================================================
+
+# Dataset root directory (relative to execution working directory or absolute)
+path: data
+
+# Train and validation image sets (relative to 'path')
+train: images/train  # 77 training frames (video1 + video2)
+val: images/val      # 18 validation frames (video3)
+test:                # Optional: test frames if benchmark split is separated
+
+# Number of classes
+nc: 2
+
+# Zero-indexed class definitions:
+# Class 0: main_off -> Red switch lever oriented VERTICALLY (pointing downwards, ~6 o'clock / disconnected "0" state)
+# Class 1: main_on  -> Red switch lever turned HORIZONTALLY (pointing rightwards, ~3 o'clock / connected "1" state)
+names:
+  0: main_off
+  1: main_on

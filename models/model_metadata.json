@@ -1,0 +1,18 @@
+{
+  "model_file": "best.pt",
+  "deployed_at": "2026-10-25T00:42:09.138441",
+  "source_checkpoint": "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\runs\\detect\\runs\\detect\\switches_baseline\\weights\\best.pt",
+  "target_classes": {
+    "0": "main_off",
+    "1": "main_on"
+  },
+  "training_parameters": {
+    "epochs": 80,
+    "batch": 16,
+    "imgsz": 640,
+    "device": "cpu",
+    "model_type": "yolov8n.pt",
+    "fliplr": 0.0,
+    "flipud": 0.0
+  }
+}
