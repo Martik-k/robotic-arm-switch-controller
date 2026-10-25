@@ -141,3 +141,27 @@ ipython_config.py
 .pytest_cache/
 .coverage
 htmlcov/
+
+# PyPI configuration file
+.pypirc
+
+# Marimo
+marimo/_static/
+marimo/_lsp/
+__marimo__/
+
+# Streamlit
+.streamlit/secrets.toml
+
+plan.md
+desicions.md
+
+# Training runs: models, checkpoints, vec_normalize.pkl, TensorBoard logs
+runs/
+
+# Local notes and exploration, not shared
+docs/rl-training-guidelines.md
+scripts/inspect_task.py
+docs/progress.md
+results/plots/
+scripts/plot_results.py

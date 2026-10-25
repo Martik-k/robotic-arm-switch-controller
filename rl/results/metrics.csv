@@ -1,0 +1,17 @@
+date,env,policy,algo,variant,seed,checkpoint,eval_seeds,episodes,success_rate,first_success_step,reward_mean,reward_std
+2026-10-18T14:42:33,button-press-v3,random,random,random,,,1000 1001 1002 1003 1004,50,0.0,,170.7,58.9
+2026-10-18T14:42:51,button-press-v3,ppo_seed0_final,ppo,ppo,0,final,1000 1001 1002 1003 1004,50,1.0,38.3,4510.2,67.5
+2026-10-18T14:43:10,button-press-v3,ppo_seed1_final,ppo,ppo,1,final,1000 1001 1002 1003 1004,50,1.0,37.9,4449.1,67.4
+2026-10-18T14:43:28,button-press-v3,ppo_seed2_final,ppo,ppo,2,final,1000 1001 1002 1003 1004,50,1.0,37.1,4507.0,114.8
+2026-10-18T14:43:46,button-press-v3,ppo_seed3_final,ppo,ppo,3,final,1000 1001 1002 1003 1004,50,1.0,37.7,4410.6,24.4
+2026-10-18T14:44:05,button-press-v3,ppo_seed4_final,ppo,ppo,4,final,1000 1001 1002 1003 1004,50,1.0,38.0,4402.5,21.0
+2026-10-18T14:44:23,button-press-v3,ppo_seed0_untrained,ppo,ppo,0,untrained,1000 1001 1002 1003 1004,50,0.0,,139.9,3.0
+2026-10-18T14:44:52,button-press-v3,ppo_seed0_final,ppo,ppo,0,final,1000 1001 1002 1003 1004,50,1.0,38.3,4510.2,67.5
+2026-10-18T17:42:32,button-press-v3,ppo_seed3_untrained_stochastic,ppo,ppo,3,untrained,1000 1001 1002 1003 1004,50,0.0,,182.2,55.0
+2026-10-18T17:42:57,button-press-v3,ppo_seed4_untrained_stochastic,ppo,ppo,4,untrained,1000 1001 1002 1003 1004,50,0.0,,204.7,91.3
+2026-10-18T18:04:52,button-press-v3,expert,expert,expert,,,1000 1001 1002 1003 1004,50,1.0,59.4,562.4,5.1
+2026-10-18T20:08:53,button-press-v3,ppo-bias2cm_seed0_final,ppo,ppo-bias2cm,0,final,1000 1001 1002 1003 1004,50,1.0,37.4,4347.3,132.6
+2026-10-18T20:09:12,button-press-v3,ppo-bias2cm_seed1_final,ppo,ppo-bias2cm,1,final,1000 1001 1002 1003 1004,50,1.0,39.0,4324.3,35.6
+2026-10-18T20:09:31,button-press-v3,ppo-bias2cm_seed2_final,ppo,ppo-bias2cm,2,final,1000 1001 1002 1003 1004,50,1.0,40.2,4293.3,18.3
+2026-10-18T20:09:51,button-press-v3,ppo-bias2cm_seed3_final,ppo,ppo-bias2cm,3,final,1000 1001 1002 1003 1004,50,1.0,37.0,4280.8,229.8
+2026-10-18T20:10:11,button-press-v3,ppo-bias2cm_seed4_final,ppo,ppo-bias2cm,4,final,1000 1001 1002 1003 1004,50,1.0,37.3,4334.3,64.9
