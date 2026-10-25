@@ -227,5 +227,6 @@ runs/
 docs/rl-training-guidelines.md
 scripts/inspect_task.py
 docs/progress.md
+docs/speaker-notes.md
 results/plots/
 scripts/plot_results.py
