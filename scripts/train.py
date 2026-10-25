@@ -82,7 +82,7 @@ def load_config(args: argparse.Namespace) -> dict:
 
     config["run"] = {
         "algo": args.algo,
-        "variant": variant_name(args.algo, config["env"]),
+        "variant": variant_name(args.algo, config),
         "seed": args.seed,
         # PPO network is small so GPU doesn't help; SAC trains every step so GPU can help
         "device": args.device or ("cpu" if args.algo == "ppo" else "auto"),
@@ -94,9 +94,20 @@ def load_config(args: argparse.Namespace) -> dict:
     return config
 
 
-def variant_name(algo: str, env_cfg: dict) -> str:
-    # e.g. 'ppo' or 'ppo-bias2cm', so different runs don't mix in plots
+def variant_name(algo: str, config: dict) -> str:
+    # e.g. 'ppo', 'ppo-bias2cm', 'ppo-ent0.01', so different runs don't mix in plots
     name = algo
+    ent = config[algo].get("ent_coef")
+    if isinstance(ent, (int, float)) and ent:  # SAC uses "auto"
+        name += f"-ent{ent:g}"
+    te = config[algo].get("target_entropy")
+    if isinstance(te, (int, float)):  # SAC with its own exploration level
+        name += f"-tent{te:g}"
+    env_cfg = config["env"]
+    if env_cfg["reward_function_version"] != "v2":
+        name += f"-{env_cfg['reward_function_version']}"
+    if env_cfg.get("reward_shaping"):
+        name += f"-{env_cfg['reward_shaping']}"
     for kind in ("jitter", "bias"):
         sigma = env_cfg.get(f"noise_{kind}", 0.0)
         if sigma:
@@ -121,7 +132,8 @@ def build_envs(config: dict, run_dir: Path) -> tuple[VecNormalize, VecNormalize]
     """Training envs (copy i gets seed + i) and one exam env with new positions."""
     env_cfg, train_cfg, run = config["env"], config["training"], config["run"]
     norm = config["normalize"]
-    env_kwargs = {"reward_function_version": env_cfg["reward_function_version"]}
+    env_kwargs = {"reward_function_version": env_cfg["reward_function_version"],
+                  "reward_shaping": env_cfg.get("reward_shaping")}
 
     train_env = make_vec_env(
         env_cfg["name"], seed=run["seed"], n_envs=env_cfg["n_envs"],

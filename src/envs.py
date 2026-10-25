@@ -6,11 +6,11 @@ import metaworld  # noqa: F401  (importing registers the Meta-World envs in gymn
 from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv, VecEnv
 
-from src.wrappers import Float32Obs, IsSuccess, NoisyObjectPosition
+from src.wrappers import AdditiveReward, Float32Obs, IsSuccess, LeverAngleSuccess, NoisyObjectPosition
 
 
 def make_env(env_name: str, seed: int, noise_jitter: float = 0.0, noise_bias: float = 0.0,
-             **kwargs) -> gym.Env:
+             noise_axes: str = "xyz", reward_shaping: str | None = None, **kwargs) -> gym.Env:
     """Create a Meta-World task wrapped for SB3; `seed` selects the set of object positions."""
     # The passive checker only warns about Meta-World's inexact bounds, which Float32Obs fixes
     env = gym.make(
@@ -18,7 +18,11 @@ def make_env(env_name: str, seed: int, noise_jitter: float = 0.0, noise_bias: fl
     )
     env = Float32Obs(env)
     if noise_jitter or noise_bias:  # meters, see NoisyObjectPosition
-        env = NoisyObjectPosition(env, jitter=noise_jitter, bias=noise_bias)
+        env = NoisyObjectPosition(env, jitter=noise_jitter, bias=noise_bias, axes=noise_axes)
+    if reward_shaping == "additive":  # see AdditiveReward
+        env = AdditiveReward(env)
+    if env_name == "lever-pull-v3":  # same success rule for every reward version
+        env = LeverAngleSuccess(env)
     return IsSuccess(env)
 
 

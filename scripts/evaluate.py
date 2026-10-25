@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     # noise on the button position (meters)
     parser.add_argument("--noise-jitter", type=float, help="std of a new error at every step, e.g. 0.01")
     parser.add_argument("--noise-bias", type=float, help="std of one error per episode, e.g. 0.01")
+    parser.add_argument("--noise-axes", default="xyz", help="which axes get noise, e.g. xy")
     parser.add_argument("--output", type=Path,
                         help="default: results/metrics.csv, or results/robustness.csv with --noise-*")
     return parser.parse_args()
@@ -61,7 +62,8 @@ class ExpertPolicy:
 
 
 def noise_kwargs(args: argparse.Namespace) -> dict:
-    return {"noise_jitter": args.noise_jitter or 0.0, "noise_bias": args.noise_bias or 0.0}
+    return {"noise_jitter": args.noise_jitter or 0.0, "noise_bias": args.noise_bias or 0.0,
+            "noise_axes": args.noise_axes}
 
 
 def model_files(run_dir: Path, checkpoint: str) -> tuple[Path, Path]:
@@ -77,7 +79,8 @@ def model_files(run_dir: Path, checkpoint: str) -> tuple[Path, Path]:
 def make_eval_env(config: dict, seed: int, vecnorm_path: Path | None, **env_kwargs):
     """One env on the positions of `seed` with the saved normalization stats."""
     env = make_vec_env(config["env"]["name"], seed=seed, n_envs=1, subprocess=False,
-                       reward_function_version=config["env"]["reward_function_version"], **env_kwargs)
+                       reward_function_version=config["env"]["reward_function_version"],
+                       reward_shaping=config["env"].get("reward_shaping"), **env_kwargs)
     env.seed(seed)  # same positions every time
     env.action_space.seed(seed)
     if vecnorm_path is None:
@@ -170,8 +173,10 @@ def record_videos(config: dict, model: BaseAlgorithm | None, vecnorm_path: Path 
 def save_metrics(path: Path, row: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     is_new = not path.exists()
+    # an existing table keeps its own columns, so old rows never shift
+    fields = list(row) if is_new else next(csv.reader(path.open()))
     with path.open("a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(row))
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         if is_new:
             writer.writeheader()
         writer.writerow(row)

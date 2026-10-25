@@ -24,9 +24,11 @@ class NoisyObjectPosition(gym.ObservationWrapper):
 
     OBJECT, OBJECT_PREV, GOAL = slice(4, 7), slice(22, 25), slice(36, 39)
 
-    def __init__(self, env: gym.Env, jitter: float = 0.0, bias: float = 0.0):
+    def __init__(self, env: gym.Env, jitter: float = 0.0, bias: float = 0.0, axes: str = "xyz"):
         super().__init__(env)
         self.jitter, self.bias = jitter, bias
+        # z of the button never changes in Meta-World, so noise there is far outside what training saw
+        self.mask = np.array([float(a in axes) for a in "xyz"])
         self._rng = np.random.default_rng()
         self._offset = np.zeros(3)
         self._prev_error = None
@@ -39,7 +41,7 @@ class NoisyObjectPosition(gym.ObservationWrapper):
         return super().reset(seed=seed, options=options)
 
     def observation(self, obs: np.ndarray) -> np.ndarray:
-        error = self._offset + self._rng.normal(0.0, self.jitter, 3)
+        error = (self._offset + self._rng.normal(0.0, self.jitter, 3)) * self.mask
         # obs[18:36] is the previous frame, so it gets the previous error
         prev_error = error if self._prev_error is None else self._prev_error
         self._prev_error = error
@@ -48,6 +50,25 @@ class NoisyObjectPosition(gym.ObservationWrapper):
         obs[self.GOAL] += error  # goal x, z = object x, z, otherwise the agent sees the truth there
         obs[self.OBJECT_PREV] += prev_error
         return obs
+
+
+class AdditiveReward(gym.Wrapper):
+    """reward = 2 * grasp_reward + 8 * in_place_reward (for lever-pull: the formula commented out in Meta-World)."""
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        reward = 2.0 * info["grasp_reward"] + 8.0 * info["in_place_reward"]
+        return obs, reward, terminated, truncated, info
+
+
+class LeverAngleSuccess(gym.Wrapper):
+    """lever-pull success by the lever angle (90 +- 7.5 deg) for any reward version; v1 uses a looser distance."""
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        angle = -self.env.unwrapped.data.joint("LeverAxis").qpos.item()
+        info["success"] = float(abs(angle - np.pi / 2) <= np.pi / 24)
+        return obs, reward, terminated, truncated, info
 
 
 class IsSuccess(gym.Wrapper):
