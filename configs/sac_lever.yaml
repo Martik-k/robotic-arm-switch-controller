@@ -1,0 +1,35 @@
+# SAC on Meta-World lever-pull-v3. Same as sac.yaml, only the task differs.
+
+env:
+  name: lever-pull-v3
+  reward_function_version: v2   # same reward as PPO
+  n_envs: 8                     # same 8 position sets as PPO, so both see the same training data
+  noise_jitter: 0.0             # training only: new error on the object position every step (m)
+  noise_bias: 0.0               # training only: one error on the object position per episode (m)
+
+normalize:
+  norm_obs: true                # same as PPO
+  norm_reward: false            # usually not used for SAC (guidelines, section 3)
+
+sac:
+  learning_rate: 3.0e-4         # SB3 default
+  buffer_size: 1_000_000        # keeps all experience, SAC learns from it again and again
+  learning_starts: 10_000       # random steps first to fill the buffer (guidelines)
+  batch_size: 256               # SB3 default
+  tau: 0.005                    # how slowly the target critic follows (SB3 default)
+  gamma: 0.99                   # same as PPO
+  train_freq: 1                 # update after every env step (SB3 default)
+  gradient_steps: -1            # one update per collected step, as standard SAC
+  ent_coef: auto                # SAC tunes its own exploration (Haarnoja et al. 2018)
+  policy_kwargs:
+    net_arch: [256, 256]        # same size as PPO
+
+training:
+  total_steps: 1_000_000        # same budget as PPO
+  eval_seed: 1000
+  eval_freq: 50_000
+  n_eval_episodes: 20
+  checkpoint_freq: 100_000
+  save_monitor_csv: true
+  keep_checkpoints: null
+  verbose: true

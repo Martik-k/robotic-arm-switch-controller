@@ -1,0 +1,40 @@
+# PPO on lever-pull-v3 with reward 2*position + 8*lever angle (+ entropy bonus). Reward ablation.
+
+env:
+  name: lever-pull-v3
+  reward_function_version: v2   # reward formula; v2 works better than v1 (McLean et al. 2025)
+  reward_shaping: additive      # formula commented out in Meta-World, see AdditiveReward
+  n_envs: 8                     # simulator copies running in parallel, <= CPU cores
+  noise_jitter: 0.0             # training only: new error on the object position every step (m)
+  noise_bias: 0.0               # training only: one error on the object position per episode (m)
+
+normalize:
+  norm_obs: true                # rescale each obs number to mean ~0, std ~1 (Andrychowicz et al. 2021)
+  norm_reward: true             # scale rewards so the critic predicts values ~1, not ~hundreds
+
+ppo:
+  n_steps: 512                  # steps per env before an update; x 8 envs = 4096-row rollout
+  batch_size: 256               # rows per weight update; 4096 / 256 = 16 updates per pass
+  n_epochs: 10                  # passes over each rollout (SB3 default)
+  learning_rate: 3.0e-4         # size of one weight update (Andrychowicz et al. 2021)
+  gamma: 0.99                   # discount, looks ~100 steps ahead (Andrychowicz et al. 2021)
+  gae_lambda: 0.95              # advantage: mostly real rewards, some critic (SB3 default)
+  clip_range: 0.2               # action probability may change by at most +-20% (Schulman et al. 2017)
+  ent_coef: 0.01                # without it the agent gets stuck under the lever (tested 0, 0.005, 0.01)
+  vf_coef: 0.5                  # weight of critic loss vs actor loss (SB3 default)
+  max_grad_norm: 0.5            # caps the size of one weight update (Huang et al. 2022)
+  policy_kwargs:
+    net_arch:                   # separate actor (pi) and critic (vf), 2 layers x 256 (Andrychowicz et al. 2021)
+      pi: [256, 256]
+      vf: [256, 256]
+    log_std_init: -0.5          # initial action std e^-0.5 ~ 0.61 (Andrychowicz et al. 2021)
+
+training:
+  total_steps: 1_000_000        # env steps in total, ~245 rollouts; same budget as SAC for a fair comparison
+  eval_seed: 1000               # exam positions, unseen in training and same for all runs
+  eval_freq: 50_000             # env steps between exams
+  n_eval_episodes: 20           # episodes per exam, deterministic actions
+  checkpoint_freq: 100_000      # env steps between saved checkpoints (model + vec_normalize.pkl)
+  save_monitor_csv: true        # per-episode reward, length, success in runs/<run>/monitor/
+  keep_checkpoints: null        # null = keep all, N = keep only the N newest
+  verbose: true                 # print a progress table after every rollout
