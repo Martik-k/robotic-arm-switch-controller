@@ -58,6 +58,7 @@ fixed_videos/
 images/
 extracted_images/
 data/images/
+*.cache
 
 # Keep dataset documentation and structure
 !data/README.md

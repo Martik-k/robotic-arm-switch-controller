@@ -1,0 +1,45 @@
+{
+  "weights": "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\models\\best.pt",
+  "dataset_config": "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\configs\\switches.yaml",
+  "split": "val",
+  "imgsz": 640,
+  "conf_threshold": 0.25,
+  "iou_threshold": 0.6,
+  "overall_metrics": {
+    "precision": 0.7971130713712911,
+    "recall": 0.847926267281106,
+    "map50": 0.8059353603950135,
+    "map": 0.4297909709740715
+  },
+  "per_class_metrics": [
+    {
+      "id": 0,
+      "name": "main_off",
+      "precision": 0.896551724137931,
+      "recall": 0.8387096774193549,
+      "map50": 0.8317032967032967,
+      "map": 0.41663409645909655
+    },
+    {
+      "id": 1,
+      "name": "main_on",
+      "precision": 0.6976744186046512,
+      "recall": 0.8571428571428571,
+      "map50": 0.7801674240867302,
+      "map": 0.44294784548904637
+    }
+  ],
+  "speed_ms": {
+    "preprocess": 1.0272413793276869,
+    "inference": 49.06280689716243,
+    "loss": 0.00022758593268949412,
+    "postprocess": 0.9945620690343965
+  },
+  "artifact_dir": "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\runs\\detect\\runs\\val_expanded_video3_video6",
+  "artifacts": [
+    "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\runs\\detect\\runs\\val_expanded_video3_video6\\confusion_matrix.png",
+    "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\runs\\detect\\runs\\val_expanded_video3_video6\\confusion_matrix_normalized.png",
+    "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\runs\\detect\\runs\\val_expanded_video3_video6\\val_batch0_pred.jpg",
+    "C:\\Users\\Marko\\personal\\UCU\\third_year\\ai\\project\\robotic-arm-switch-controller\\runs\\detect\\runs\\val_expanded_video3_video6\\val_batch0_labels.jpg"
+  ]
+}

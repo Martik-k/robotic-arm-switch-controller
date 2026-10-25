@@ -27,7 +27,7 @@ path: data
 
 # Train and validation image sets (relative to 'path')
 train: images/train  # 77 training frames (video1 + video2)
-val: images/val      # 18 validation frames (video3)
+val: images/val      # 58 validation frames (video3 + video6)
 test:                # Optional: test frames if benchmark split is separated
 
 # Number of classes

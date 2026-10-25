@@ -3,3 +3,7 @@
 python scripts\visualize_labels.py --images images\train\video3 --labels labels\train\video3 --output results\train\video3
 
 python scripts\add_prefix.py -f labels\train\video3 -p v3
+
+python src\inference.py --source videos\video6.mp4 --save-dir runs\predict\
+
+python scripts/extract_frames.py

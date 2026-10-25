@@ -64,13 +64,7 @@ def prepare_split(
                 if not parts:
                     continue
                 old_cls = int(parts[0])
-                if old_cls in (2, 3):
-                    new_cls = 0 if old_cls == 3 else 1
-                elif old_cls in (0, 1):
-                    # Already 0 or 1
-                    new_cls = old_cls
-                else:
-                    new_cls = old_cls
+                new_cls = CLASS_MAPPING.get(old_cls, old_cls)
 
                 coords = parts[1:]
                 new_lines.append(f"{new_cls} " + " ".join(coords))
